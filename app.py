@@ -243,6 +243,27 @@ if uploaded:
         st.stop()
 
     base = baseline_rules(pages, questions)
+
+# Provider rules overlay
+provider_cfgs = _load_providers()
+full_text = "\n".join(pages)
+detected = _detect_provider(full_text, provider_cfgs)
+
+# Optional: let user override when detection is weak
+with st.expander("Provider detection", expanded=False):
+    st.write(f"Detected provider: **{detected}**")
+    override = st.text_input("Override provider name (leave blank to keep detection)", value="")
+    if override:
+        detected = override.strip()
+
+# Apply provider rules if available
+prov = next((c for c in provider_cfgs if c["_name"] == detected), None)
+if prov:
+    overlay = _apply_provider_rules(full_text, prov.get("rules", {}))
+    # overlay overwrites baseline where it found something
+    for k, v in overlay.items():
+        base[k] = v
+
     needs_llm = any((v["value"] is None or v["confidence"] < 70) for v in base.values())
     llm_data = llm_fill(pages, questions) if needs_llm else {}
 
