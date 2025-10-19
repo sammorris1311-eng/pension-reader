@@ -47,57 +47,77 @@ def baseline_rules(pages: List[str], questions: List[Dict[str, Any]]) -> Dict[st
     res: Dict[str, Dict[str, Any]] = {}
     text_all = "\n".join(pages)
 
-    def find(patterns):
+    def find(patterns, text):
         for p in patterns:
-            m = re.search(p, text_all, flags=re.I)
+            m = re.search(p, text, flags=re.I)
             if m:
                 val = m.group(2) if m.lastindex and m.lastindex >= 2 else m.group(1)
                 span = m.span()
-                snippet = text_all[max(0, span[0]-60):min(len(text_all), span[1]+60)]
+                snippet = text[max(0, span[0]-80):min(len(text), span[1]+80)]
                 return val, snippet
         return None, None
 
+    # Money like £12,345.67 or 12345.67 or GBP 1,234
+    MONEY = r"(?:GBP|£)?\s*([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{2})?|[0-9]+(?:\.[0-9]{2})?)"
+    # Dates: 12/03/2024, 12-03-24, 12 March 2024, 12 Mar 2024
+    DATE = r"((?:[0-3]?\d[\/\-][0-1]?\d[\/\-](?:\d{2}|\d{4}))|(?:[0-3]?\d\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec|January|February|March|April|June|July|August|September|October|November|December)\s+\d{2,4}))"
+
     patterns = {
-        "plan_number": [r"(policy|plan|account|reference)[^:\n]*[:# ]+([A-Z0-9\-\/]{6,})", r"\b([A-Z0-9]{8,})\b"],
-        "pstr_number":  [r"\bPSTR[^A-Za-z0-9]*([0-9]{8})\b", r"\b(00\d{6})\b"],
-        "selected_retirement_age": [r"(selected|normal) retirement (age|date)[^\d]*(\d{2})"],
-        "plan_status": [r"\b(in force|paid up|lapsed)\b"],
-        "current_value": [r"(current|fund) value[^\d£]*([£$]?[0-9,]+\.\d{2}|[£$]?[0-9,]+)"],
-        "current_value_date": [r"(as at|valuation date)[^\d]*(\d{1,2}[\/\-][0-1]?\d[\/\-](?:\d{2}|\d{4}))"],
-        "transfer_value": [r"transfer value[^\d£]*([£$]?[0-9,]+\.\d{2}|[£$]?[0-9,]+)"],
-        "transfer_value_date": [r"(as at|valuation date)[^\d]*(\d{1,2}[\/\-][0-1]?\d[\/\-](?:\d{2}|\d{4}))"],
-        "life_cover": [r"life cover[: ]+(yes|no)"],
-        "protected_retirement_age": [r"protected retirement age[: ]+(yes|no)"],
-        "pension_sharing_earmarking": [r"(pension sharing|earmarking)[: ]+(yes|no)"],
-        "advice_available": [r"advice available[: ]+(yes|no)"],
-        "advice_cost": [r"advice (charge|cost)[^\d£]*([£$]?[0-9,]+\.\d{2}|[£$]?[0-9,]+)"],
-        "tax_free_cash_amount": [r"(tax[- ]?free cash|PCLS)[^\d£]*([£$]?[0-9,]+\.\d{2}|[£$]?[0-9,]+)"],
-        "partial_transfers_allowed": [r"partial transfers?[: ]+(yes|no)"],
-        "funds_available_count": [r"(funds available|available funds)[^\d]*(\d{1,4})"],
-        "funds_max_hold": [r"maximum number of funds[^\d]*(\d{1,3})"]
+        "plan_number": [
+            r"(?:policy|plan|account|reference|policy\s*no\.?|plan\s*no\.?)\s*[:#]?\s*([A-Z0-9\-\/]{6,})",
+            r"\b([A-Z]{2,3}\d{5,}|[A-Z0-9]{8,})\b"
+        ],
+        "pstr_number":  [
+            r"\bPSTR[^A-Za-z0-9]*([0-9]{8})\b",
+            r"\b(00\d{6})\b"
+        ],
+        "selected_retirement_age": [r"(?:selected|normal)\s+retirement\s+(?:age|date)[^\d]*(\d{2})"],
+        "plan_status": [r"\b(in\s*force|paid\s*up|lapsed)\b"],
+
+        "current_value": [rf"(?:current|fund)\s+value[^\d£]*{MONEY}"],
+        "current_value_date": [rf"(?:as at|valuation date|valued on)[^\dA-Z]*{DATE}"],
+
+        "transfer_value": [rf"(?:cash\s+equivalent\s+transfer\s+value|transfer\s+value)[^\d£]*{MONEY}"],
+        "transfer_value_date": [rf"(?:as at|valuation date|valued on)[^\dA-Z]*{DATE}"],
+
+        "life_cover": [r"life\s*cover\s*[: ]+(yes|no)"],
+        "protected_retirement_age": [r"protected\s+retirement\s+age\s*[: ]+(yes|no)"],
+        "pension_sharing_earmarking": [r"(pension\s+sharing|earmarking)\s*[: ]+(yes|no)"],
+        "advice_available": [r"advice\s+available\s*[: ]+(yes|no)"],
+        "advice_cost": [rf"advice\s+(?:charge|cost)[^\d£]*{MONEY}"],
+        "tax_free_cash_amount": [rf"(?:tax[-\s]?free\s+cash|PCLS)[^\d£]*{MONEY}"],
+        "partial_transfers_allowed": [r"partial\s+transfers?\s*[: ]+(yes|no)"],
+        "funds_available_count": [r"(?:funds\s+available|available\s+funds)[^\d]*(\d{1,4})"],
+        "funds_max_hold": [r"maximum\s+number\s+of\s+funds[^\d]*(\d{1,3})"]
     }
+
+    def norm_money(x):
+        x = re.sub(r"[£,\s]|GBP", "", x, flags=re.I)
+        try:
+            return float(x)
+        except:
+            return None
 
     for q in questions:
         key = q["key"]
         value, snippet = (None, None)
         if key in patterns:
-            value, snippet = find(patterns[key])
+            value, snippet = find(patterns[key], text_all)
 
         conf = 0
         if value is not None:
             t = q["type"]
             v = value
             if t in ["currency","number"]:
-                v = re.sub(r"[£$,]","", v)
-                try: v=float(v); conf=70
-                except: v=value; conf=60
+                v = norm_money(v) if t == "currency" else (float(v) if re.fullmatch(r"\d+(?:\.\d+)?", str(v)) else None)
+                conf = 75 if v is not None else 60
             elif t == "boolean":
                 sv = str(value).strip().lower()
-                if sv in ["yes","true","y"]: v, conf = True, 70
-                elif sv in ["no","false","n"]: v, conf = False, 70
+                if sv in ["yes","true","y"]: v, conf = True, 80
+                elif sv in ["no","false","n"]: v, conf = False, 80
                 else: v, conf = None, 0
             else:
-                conf = 75
+                conf = 80
             res[key] = {"value": v, "confidence": conf, "evidence": {"page": None, "snippet": snippet, "source":"baseline"}}
         else:
             res[key] = {"value": None, "confidence": 0, "evidence": None}
