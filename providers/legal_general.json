@@ -1,0 +1,19 @@
+{
+  "detect": ["legal & general", "legal and general", "l&g"],
+  "rules": {
+    "plan_number": ["Arrangement Number:\\s*([0-9]{6,})"],
+    "start_date": ["Policy start date:\\s*([0-3]?\\d[\\/\\-][0-1]?\\d[\\/\\-](?:\\d{2}|\\d{4})|[0-3]?\\d\\s+\\w+\\s+\\d{2,4})"],
+    "selected_retirement_age": ["Nominated retirement age:\\s*([0-9]{2})"],
+    "current_value": ["Current value:\\s*(?:GBP|£)?\\s*([0-9,]+(?:\\.[0-9]{2})?)"],
+    "current_value_date": ["The values quoted are as at\\s*([0-3]?\\d[\\/\\-][0-1]?\\d[\\/\\-](?:\\d{2}|\\d{4}))"],
+    "transfer_value": ["Transfer value:\\s*(?:GBP|£)?\\s*([0-9,]+(?:\\.[0-9]{2})?)"],
+    "transfer_value_date": ["The values quoted are as at\\s*([0-3]?\\d[\\/\\-][0-1]?\\d[\\/\\-](?:\\d{2}|\\d{4}))"],
+    "partial_transfers_allowed": ["Partial transfer out allowed\\?\\s*(Yes|No)"],
+    "life_cover": ["Life Cover\\s*/\\s*Life Sum Assured\\s*(Yes|No)"],
+    "pension_sharing_earmarking": ["not been subject to.*pension sharing.*earmarking"],
+    "drawdown_options": ["Retirement Options\\s+This plan offers the following retirement options:(.*?)(?:Death Benefits|Nominated Beneficiaries)"],
+    "death_benefits": ["Death Benefits(.*?)(?:Nominated Beneficiaries|Other Benefits)"],
+    "charges": ["Fund and Charge Information(.*?)(?:Contributions|Confidential\\s+Contributions)"],
+    "fund_selection": ["Fund Name\\s+([^\\n]+)", "\\bISIN\\s+([A-Z0-9]{12})\\b"]
+  }
+}
