@@ -15,6 +15,71 @@ OPENAI_API_KEY = st.secrets.get("OPENAI_API_KEY", "")
 OPENAI_MODEL = st.secrets.get("OPENAI_MODEL", "gpt-4o-mini")
 OPENAI_URL = "https://api.openai.com/v1/chat/completions"
 
+import os, glob
+
+def _norm_money(x: str):
+    if x is None:
+        return None
+    x = re.sub(r"(GBP|£|,|\s)", "", str(x), flags=re.I)
+    try:
+        return float(x)
+    except:
+        return None
+
+def _apply_provider_rules(text: str, rules: dict) -> Dict[str, Dict[str, Any]]:
+    out: Dict[str, Dict[str, Any]] = {}
+    def cap_snip(m):
+        s = m.span()
+        return text[max(0, s[0]-80):min(len(text), s[1]+80)]
+    for key, pats in rules.items():
+        if not isinstance(pats, list):
+            continue
+        val = None
+        snip = None
+        for p in pats:
+            m = re.search(p, text, flags=re.I|re.S)
+            if m:
+                # choose last group if present, else whole
+                g = m.groups()
+                val = g[-1] if g else m.group(0)
+                snip = cap_snip(m)
+                break
+        if val is not None:
+            t = next((q["type"] for q in read_questions() if q["key"] == key), "string")
+            if t == "currency":
+                val = _norm_money(val)
+            elif t == "number":
+                try: val = float(str(val).replace(",",""))
+                except: pass
+            elif t == "boolean":
+                s = str(val).strip().lower()
+                val = True if s in ["yes","true","y","1"] else False if s in ["no","false","n","0"] else None
+            out[key] = {"value": val, "confidence": 90, "evidence": {"page": None, "snippet": snip, "source": "provider_rules"}}
+    return out
+
+def _load_providers():
+    configs = []
+    for path in glob.glob("providers/*.json"):
+        try:
+            cfg = json.loads(open(path, "r", encoding="utf-8").read())
+            cfg["_name"] = os.path.basename(path).replace(".json","")
+            configs.append(cfg)
+        except Exception:
+            pass
+    return configs
+
+def _detect_provider(text: str, provider_cfgs: list) -> str:
+    text_low = text.lower()
+    scores = []
+    for cfg in provider_cfgs:
+        hits = sum(1 for token in cfg.get("detect", []) if token in text_low)
+        scores.append((hits, cfg["_name"]))
+    scores.sort(reverse=True)
+    # return best if at least 1 hit
+    if scores and scores[0][0] > 0:
+        return scores[0][1]
+    return "default"
+
 class Evidence(BaseModel):
     page: Optional[int] = None
     snippet: Optional[str] = None
